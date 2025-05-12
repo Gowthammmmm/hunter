@@ -1,0 +1,6 @@
+termcolor
+bs4
+httpx
+trio
+tqdm
+colorama

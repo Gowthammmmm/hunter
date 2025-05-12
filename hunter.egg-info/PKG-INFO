@@ -1,0 +1,17 @@
+Metadata-Version: 2.4
+Name: hunter
+Version: 1.61
+Summary: hunter allows you to check if the mail is used on different sites...
+Home-page: http://github.com/whoamikiddie/hunter
+Author: whoamikiddie
+Author-email: 
+Requires-Dist: termcolor
+Requires-Dist: bs4
+Requires-Dist: httpx
+Requires-Dist: trio
+Requires-Dist: tqdm
+Requires-Dist: colorama
+Dynamic: author
+Dynamic: home-page
+Dynamic: requires-dist
+Dynamic: summary
