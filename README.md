@@ -56,7 +56,7 @@ Hunter is a powerful tool that helps you find accounts associated with an email 
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/hunter.git
+git clone https://github.com/whoamikiddie/hunter.git
 cd hunter
 ```
 
@@ -159,9 +159,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Support
 
 For support, please:
-1. Check the [Issues](https://github.com/yourusername/hunter/issues) page
+1. Check the [Issues](https://github.com/whoamikiddie/hunter/issues) page
 2. Create a new issue if needed
-3. Join our [Discord](https://discord.gg/hunter) community
+
 
 ## Disclaimer
 
