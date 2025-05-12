@@ -1,21 +1,29 @@
 from hunter.core import *
 from hunter.localuseragent import *
+from bs4 import BeautifulSoup
+import random
+import re
 
 
 async def amazon(email, client, out):
     name = "amazon"
     domain = "amazon.com"
     method = "login"
-    frequent_rate_limit=False
+    frequent_rate_limit = True
 
     headers = {
-        "User-agent": random.choice(ua["browsers"]["chrome"]),
+        "User-Agent": random.choice(ua["browsers"]["chrome"]),
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.5",
         "Accept-Encoding": "gzip, deflate, br",
         "DNT": "1",
         "Connection": "keep-alive",
-        "Upgrade-Insecure-Requests": "1"
+        "Upgrade-Insecure-Requests": "1",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Sec-Fetch-User": "?1",
+        "TE": "trailers"
     }
 
     try:
@@ -23,13 +31,32 @@ async def amazon(email, client, out):
         url = "https://www.amazon.com/ap/signin?openid.pape.max_auth_age=0&openid.return_to=https%3A%2F%2Fwww.amazon.com%2F%3F_encoding%3DUTF8%26ref_%3Dnav_ya_signin&openid.identity=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select&openid.assoc_handle=usflex&openid.mode=checkid_setup&openid.claimed_id=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select&openid.ns=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0&"
         req = await client.get(url, headers=headers)
         
+        if req.status_code == 429:
+            out.append({
+                "name": name,
+                "domain": domain,
+                "method": method,
+                "frequent_rate_limit": frequent_rate_limit,
+                "rateLimit": True,
+                "exists": False,
+                "emailrecovery": None,
+                "phoneNumber": None,
+                "others": None
+            })
+            return
+
         if req.status_code != 200:
-            out.append({"name": name,"domain":domain,"method":method,"frequent_rate_limit":frequent_rate_limit,
-                        "rateLimit": True,
-                        "exists": False,
-                        "emailrecovery": None,
-                        "phoneNumber": None,
-                        "others": None})
+            out.append({
+                "name": name,
+                "domain": domain,
+                "method": method,
+                "frequent_rate_limit": frequent_rate_limit,
+                "rateLimit": True,
+                "exists": False,
+                "emailrecovery": None,
+                "phoneNumber": None,
+                "others": None
+            })
             return
 
         body = BeautifulSoup(req.text, 'html.parser')
@@ -38,38 +65,124 @@ async def amazon(email, client, out):
         data["email"] = email
 
         # Try the sign-in endpoint
-        req = await client.post('https://www.amazon.com/ap/signin/', data=data, headers=headers)
-        body = BeautifulSoup(req.text, 'html.parser')
+        check = await client.post('https://www.amazon.com/ap/signin/', data=data, headers=headers)
+        
+        if check.status_code == 429:
+            out.append({
+                "name": name,
+                "domain": domain,
+                "method": method,
+                "frequent_rate_limit": frequent_rate_limit,
+                "rateLimit": True,
+                "exists": False,
+                "emailrecovery": None,
+                "phoneNumber": None,
+                "others": None
+            })
+            return
+
+        if check.status_code != 200:
+            out.append({
+                "name": name,
+                "domain": domain,
+                "method": method,
+                "frequent_rate_limit": frequent_rate_limit,
+                "rateLimit": True,
+                "exists": False,
+                "emailrecovery": None,
+                "phoneNumber": None,
+                "others": None
+            })
+            return
+
+        body = BeautifulSoup(check.text, 'html.parser')
 
         # Check for various indicators of account existence
         if (body.find("div", {"id": "auth-password-missing-alert"}) or 
-            "Enter your password" in req.text or
-            "Password" in req.text):
-            out.append({"name": name,"domain":domain,"method":method,"frequent_rate_limit":frequent_rate_limit,
-                        "rateLimit": False,
-                        "exists": True,
-                        "emailrecovery": None,
-                        "phoneNumber": None,
-                        "others": None})
+            "Enter your password" in check.text or
+            "Password" in check.text):
+            
+            # Try to get additional account info
+            try:
+                # Try to get public profile info
+                profile_check = await client.get(
+                    f"https://www.amazon.com/gp/profile/amzn1.account.{email.split('@')[0]}",
+                    headers=headers
+                )
+                
+                if profile_check.status_code == 200:
+                    # Extract profile info from response
+                    profile_match = re.search(r'<span class="a-profile-name">([^<]+)</span>', profile_check.text)
+                    if profile_match:
+                        profile_name = profile_match.group(1)
+                        
+                        # Try to get member since date
+                        since_match = re.search(r'Member since\s+([^<]+)</span>', profile_check.text)
+                        member_since = since_match.group(1) if since_match else None
+                        
+                        # Try to get review count
+                        review_match = re.search(r'(\d+)\s+reviews?', profile_check.text)
+                        review_count = review_match.group(1) if review_match else None
+                        
+                        others = {
+                            "name": profile_name,
+                            "profile_url": f"https://www.amazon.com/gp/profile/amzn1.account.{email.split('@')[0]}",
+                            "member_since": member_since,
+                            "review_count": review_count
+                        }
+                    else:
+                        others = None
+                else:
+                    others = None
+            except:
+                others = None
+
+            out.append({
+                "name": name,
+                "domain": domain,
+                "method": method,
+                "frequent_rate_limit": frequent_rate_limit,
+                "rateLimit": False,
+                "exists": True,
+                "emailrecovery": None,
+                "phoneNumber": None,
+                "others": others
+            })
         else:
-            out.append({"name": name,"domain":domain,"method":method,"frequent_rate_limit":frequent_rate_limit,
-                        "rateLimit": False,
-                        "exists": False,
-                        "emailrecovery": None,
-                        "phoneNumber": None,
-                        "others": None})
+            out.append({
+                "name": name,
+                "domain": domain,
+                "method": method,
+                "frequent_rate_limit": frequent_rate_limit,
+                "rateLimit": False,
+                "exists": False,
+                "emailrecovery": None,
+                "phoneNumber": None,
+                "others": None
+            })
+
     except Exception as e:
         if "Too Many Requests" in str(e) or "429" in str(e):
-            out.append({"name": name,"domain":domain,"method":method,"frequent_rate_limit":frequent_rate_limit,
-                        "rateLimit": True,
-                        "exists": False,
-                        "emailrecovery": None,
-                        "phoneNumber": None,
-                        "others": None})
+            out.append({
+                "name": name,
+                "domain": domain,
+                "method": method,
+                "frequent_rate_limit": frequent_rate_limit,
+                "rateLimit": True,
+                "exists": False,
+                "emailrecovery": None,
+                "phoneNumber": None,
+                "others": None
+            })
         else:
-            out.append({"name": name,"domain":domain,"method":method,"frequent_rate_limit":frequent_rate_limit,
-                        "rateLimit": False,
-                        "exists": False,
-                        "emailrecovery": None,
-                        "phoneNumber": None,
-                        "others": None})
+            out.append({
+                "name": name,
+                "domain": domain,
+                "method": method,
+                "frequent_rate_limit": frequent_rate_limit,
+                "rateLimit": False,
+                "exists": False,
+                "emailrecovery": None,
+                "phoneNumber": None,
+                "others": None
+            })
