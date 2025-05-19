@@ -1,7 +1,8 @@
 from hunter.core import *
 from hunter.localuseragent import *
 import random
-import re
+import json
+import time
 
 async def outlook(email, client, out):
     name = "outlook"
@@ -11,114 +12,189 @@ async def outlook(email, client, out):
 
     headers = {
         'User-Agent': random.choice(ua["browsers"]["chrome"]),
-        'Accept': 'application/json, text/plain, */*',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.5',
         'Accept-Encoding': 'gzip, deflate, br',
-        'X-Requested-With': 'XMLHttpRequest',
-        'Origin': 'https://signup.live.com',
         'DNT': '1',
         'Connection': 'keep-alive',
-        'Referer': 'https://signup.live.com/signup',
-        'Sec-Fetch-Dest': 'empty',
-        'Sec-Fetch-Mode': 'cors',
-        'Sec-Fetch-Site': 'same-origin',
+        'Upgrade-Insecure-Requests': '1',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Sec-Fetch-User': '?1',
+        'TE': 'trailers'
     }
 
     try:
-        # Get initial page and extract CSRF token
-        response = await client.get(
-            "https://signup.live.com/signup",
-            headers=headers,
-            follow_redirects=True
-        )
-        
-        if response.status_code != 200:
-            out.append({
-                "name": name,
-                "domain": domain,
-                "method": method,
-                "frequent_rate_limit": frequent_rate_limit,
-                "rateLimit": True,
-                "exists": False,
-                "emailrecovery": None,
-                "phoneNumber": None,
-                "others": None
-            })
-            return
+        # Method 1: Try login endpoint
+        try:
+            login_data = {
+                "login": email,
+                "passwd": "Hunter123!@#",
+                "type": "11"
+            }
 
-        # Extract CSRF token using regex
-        csrf_match = re.search(r'name="PPFT" value="([^"]+)"', response.text)
-        if not csrf_match:
-            raise Exception("CSRF token not found")
+            login_check = await client.post(
+                'https://login.live.com/ppsecure/post.srf',
+                headers=headers,
+                data=login_data
+            )
 
-        token = csrf_match.group(1)
-        headers["X-CSRF-Token"] = token
+            if login_check.status_code == 429:
+                out.append({
+                    "name": name,
+                    "domain": domain,
+                    "method": method,
+                    "frequent_rate_limit": frequent_rate_limit,
+                    "rateLimit": True,
+                    "exists": False,
+                    "emailrecovery": None,
+                    "phoneNumber": None,
+                    "others": None
+                })
+                return
 
-        # Check email availability
-        check = await client.post(
-            "https://signup.live.com/API/CheckAvailableSigninNames",
-            json={
-                "signInName": email,
-                "uaid": token
-            },
-            headers=headers
-        )
+            if "account.live.com" in login_check.url or "login.live.com/ppsecure/post.srf" in login_check.url:
+                out.append({
+                    "name": name,
+                    "domain": domain,
+                    "method": method,
+                    "frequent_rate_limit": frequent_rate_limit,
+                    "rateLimit": False,
+                    "exists": True,
+                    "emailrecovery": None,
+                    "phoneNumber": None,
+                    "others": None
+                })
+                return
+        except:
+            pass
 
-        if check.status_code == 429:
-            out.append({
-                "name": name,
-                "domain": domain,
-                "method": method,
-                "frequent_rate_limit": frequent_rate_limit,
-                "rateLimit": True,
-                "exists": False,
-                "emailrecovery": None,
-                "phoneNumber": None,
-                "others": None
-            })
-            return
+        # Method 2: Try registration endpoint
+        try:
+            register_data = {
+                "signup": "1",
+                "login": email,
+                "passwd": "Hunter123!@#",
+                "passwd2": "Hunter123!@#",
+                "type": "11"
+            }
 
-        if check.status_code != 200:
-            out.append({
-                "name": name,
-                "domain": domain,
-                "method": method,
-                "frequent_rate_limit": frequent_rate_limit,
-                "rateLimit": True,
-                "exists": False,
-                "emailrecovery": None,
-                "phoneNumber": None,
-                "others": None
-            })
-            return
+            register_check = await client.post(
+                'https://signup.live.com/signup',
+                headers=headers,
+                data=register_data
+            )
 
-        response_data = check.json()
-        
-        # Check if email exists based on response
-        if response_data.get("isAvailable") is False:
-            out.append({
-                "name": name,
-                "domain": domain,
-                "method": method,
-                "frequent_rate_limit": frequent_rate_limit,
-                "rateLimit": False,
-                "exists": True,
-                "emailrecovery": None,
-                "phoneNumber": None,
-                "others": None
-            })
-        else:
-            out.append({
-                "name": name,
-                "domain": domain,
-                "method": method,
-                "frequent_rate_limit": frequent_rate_limit,
-                "rateLimit": False,
-                "exists": False,
-                "emailrecovery": None,
-                "phoneNumber": None,
-                "others": None
-            })
+            if register_check.status_code == 429:
+                out.append({
+                    "name": name,
+                    "domain": domain,
+                    "method": method,
+                    "frequent_rate_limit": frequent_rate_limit,
+                    "rateLimit": True,
+                    "exists": False,
+                    "emailrecovery": None,
+                    "phoneNumber": None,
+                    "others": None
+                })
+                return
+
+            if "email_already_exists" in register_check.text.lower() or "email_already_taken" in register_check.text.lower():
+                out.append({
+                    "name": name,
+                    "domain": domain,
+                    "method": method,
+                    "frequent_rate_limit": frequent_rate_limit,
+                    "rateLimit": False,
+                    "exists": True,
+                    "emailrecovery": None,
+                    "phoneNumber": None,
+                    "others": None
+                })
+                return
+        except:
+            pass
+
+        # Method 3: Try password reset endpoint
+        try:
+            reset_data = {
+                "login": email,
+                "type": "11"
+            }
+
+            reset_check = await client.post(
+                'https://account.live.com/resetpassword',
+                headers=headers,
+                data=reset_data
+            )
+
+            if reset_check.status_code == 429:
+                out.append({
+                    "name": name,
+                    "domain": domain,
+                    "method": method,
+                    "frequent_rate_limit": frequent_rate_limit,
+                    "rateLimit": True,
+                    "exists": False,
+                    "emailrecovery": None,
+                    "phoneNumber": None,
+                    "others": None
+                })
+                return
+
+            if "recovery_email_sent" in reset_check.text.lower() or "recovery_identifier_sent" in reset_check.text.lower():
+                out.append({
+                    "name": name,
+                    "domain": domain,
+                    "method": method,
+                    "frequent_rate_limit": frequent_rate_limit,
+                    "rateLimit": False,
+                    "exists": True,
+                    "emailrecovery": None,
+                    "phoneNumber": None,
+                    "others": None
+                })
+                return
+        except:
+            pass
+
+        # Method 4: Try username lookup
+        try:
+            username = email.split('@')[0]
+            lookup_check = await client.get(
+                f'https://login.live.com/GetCredentialType.srf?opid=4B7C0A0A-0A0A-0A0A-0A0A-0A0A0A0A0A0A&mkt=EN-US&lc=1033&username={username}',
+                headers=headers
+            )
+
+            if lookup_check.status_code == 200:
+                out.append({
+                    "name": name,
+                    "domain": domain,
+                    "method": method,
+                    "frequent_rate_limit": frequent_rate_limit,
+                    "rateLimit": False,
+                    "exists": True,
+                    "emailrecovery": None,
+                    "phoneNumber": None,
+                    "others": None
+                })
+                return
+        except:
+            pass
+
+        # If we get here, no account was found
+        out.append({
+            "name": name,
+            "domain": domain,
+            "method": method,
+            "frequent_rate_limit": frequent_rate_limit,
+            "rateLimit": False,
+            "exists": False,
+            "emailrecovery": None,
+            "phoneNumber": None,
+            "others": None
+        })
 
     except Exception as e:
         if "Too Many Requests" in str(e) or "429" in str(e):

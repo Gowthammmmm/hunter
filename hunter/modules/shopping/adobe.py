@@ -5,9 +5,9 @@ import json
 import time
 import asyncio
 
-async def gmail(email, client, out):
-    name = "gmail"
-    domain = "gmail.com"
+async def adobe(email, client, out):
+    name = "adobe"
+    domain = "adobe.com"
     method = "register"
     frequent_rate_limit = True
 
@@ -33,16 +33,15 @@ async def gmail(email, client, out):
         # Method 1: Try login endpoint
         try:
             login_data = {
-                "Email": email,
-                "Passwd": "Hunter123!@#",
-                "continue": "https://mail.google.com/mail/",
-                "service": "mail"
+                "username": email,
+                "password": "Hunter123!@#",
+                "rememberMe": "true"
             }
 
             login_check = await client.post(
-                'https://accounts.google.com/ServiceLogin',
+                'https://auth.services.adobe.com/signin/v2',
                 headers=headers,
-                data=login_data
+                json=login_data
             )
 
             if login_check.status_code == 429:
@@ -61,20 +60,51 @@ async def gmail(email, client, out):
                 })
                 return
 
-            if "myaccount.google.com" in login_check.url or "accounts.google.com/signin/v2/challenge" in login_check.url:
+            try:
+                login_response = login_check.json()
+                if login_response.get("user") or login_response.get("authenticated"):
+                    out.append({
+                        "name": name,
+                        "domain": domain,
+                        "method": method,
+                        "frequent_rate_limit": frequent_rate_limit,
+                        "rateLimit": False,
+                        "exists": True,
+                        "emailrecovery": None,
+                        "phoneNumber": None,
+                        "others": None
+                    })
+                    return
+            except json.JSONDecodeError:
+                # If response is not JSON, check text content
+                if "password" in login_check.text.lower() or "enter your password" in login_check.text.lower():
+                    out.append({
+                        "name": name,
+                        "domain": domain,
+                        "method": method,
+                        "frequent_rate_limit": frequent_rate_limit,
+                        "rateLimit": False,
+                        "exists": True,
+                        "emailrecovery": None,
+                        "phoneNumber": None,
+                        "others": None
+                    })
+                    return
+        except Exception as e:
+            if "Too Many Requests" in str(e) or "429" in str(e):
+                await asyncio.sleep(random.uniform(5, 10))
                 out.append({
                     "name": name,
                     "domain": domain,
                     "method": method,
                     "frequent_rate_limit": frequent_rate_limit,
-                    "rateLimit": False,
-                    "exists": True,
+                    "rateLimit": True,
+                    "exists": False,
                     "emailrecovery": None,
                     "phoneNumber": None,
                     "others": None
                 })
                 return
-        except:
             pass
 
         # Add random delay between 1-3 seconds
@@ -83,18 +113,16 @@ async def gmail(email, client, out):
         # Method 2: Try registration endpoint
         try:
             register_data = {
-                "Email": email,
-                "Passwd": "Hunter123!@#",
-                "PasswdAgain": "Hunter123!@#",
-                "service": "mail",
-                "continue": "https://mail.google.com/mail/",
-                "signup": "1"
+                "email": email,
+                "password": "Hunter123!@#",
+                "firstName": "Hunter",
+                "lastName": "User"
             }
 
             register_check = await client.post(
-                'https://accounts.google.com/SignUp',
+                'https://auth.services.adobe.com/signup/v2',
                 headers=headers,
-                data=register_data
+                json=register_data
             )
 
             if register_check.status_code == 429:
@@ -113,20 +141,51 @@ async def gmail(email, client, out):
                 })
                 return
 
-            if "email_already_exists" in register_check.text.lower() or "email_already_taken" in register_check.text.lower():
+            try:
+                register_response = register_check.json()
+                if "email_already_exists" in str(register_response).lower() or "email_already_taken" in str(register_response).lower():
+                    out.append({
+                        "name": name,
+                        "domain": domain,
+                        "method": method,
+                        "frequent_rate_limit": frequent_rate_limit,
+                        "rateLimit": False,
+                        "exists": True,
+                        "emailrecovery": None,
+                        "phoneNumber": None,
+                        "others": None
+                    })
+                    return
+            except json.JSONDecodeError:
+                # If response is not JSON, check text content
+                if "email already exists" in register_check.text.lower() or "email already taken" in register_check.text.lower():
+                    out.append({
+                        "name": name,
+                        "domain": domain,
+                        "method": method,
+                        "frequent_rate_limit": frequent_rate_limit,
+                        "rateLimit": False,
+                        "exists": True,
+                        "emailrecovery": None,
+                        "phoneNumber": None,
+                        "others": None
+                    })
+                    return
+        except Exception as e:
+            if "Too Many Requests" in str(e) or "429" in str(e):
+                await asyncio.sleep(random.uniform(5, 10))
                 out.append({
                     "name": name,
                     "domain": domain,
                     "method": method,
                     "frequent_rate_limit": frequent_rate_limit,
-                    "rateLimit": False,
-                    "exists": True,
+                    "rateLimit": True,
+                    "exists": False,
                     "emailrecovery": None,
                     "phoneNumber": None,
                     "others": None
                 })
                 return
-        except:
             pass
 
         # Add random delay between 1-3 seconds
@@ -135,14 +194,13 @@ async def gmail(email, client, out):
         # Method 3: Try password reset endpoint
         try:
             reset_data = {
-                "Email": email,
-                "continue": "https://accounts.google.com/signin/recovery"
+                "email": email
             }
 
             reset_check = await client.post(
-                'https://accounts.google.com/signin/v2/recoveryidentifier',
+                'https://auth.services.adobe.com/reset-password/v2',
                 headers=headers,
-                data=reset_data
+                json=reset_data
             )
 
             if reset_check.status_code == 429:
@@ -161,30 +219,61 @@ async def gmail(email, client, out):
                 })
                 return
 
-            if "recovery_email_sent" in reset_check.text.lower() or "recovery_identifier_sent" in reset_check.text.lower():
+            try:
+                reset_response = reset_check.json()
+                if reset_response.get("email_sent") or reset_response.get("recovery_email_sent"):
+                    out.append({
+                        "name": name,
+                        "domain": domain,
+                        "method": method,
+                        "frequent_rate_limit": frequent_rate_limit,
+                        "rateLimit": False,
+                        "exists": True,
+                        "emailrecovery": None,
+                        "phoneNumber": None,
+                        "others": None
+                    })
+                    return
+            except json.JSONDecodeError:
+                # If response is not JSON, check text content
+                if "email sent" in reset_check.text.lower() or "recovery email sent" in reset_check.text.lower():
+                    out.append({
+                        "name": name,
+                        "domain": domain,
+                        "method": method,
+                        "frequent_rate_limit": frequent_rate_limit,
+                        "rateLimit": False,
+                        "exists": True,
+                        "emailrecovery": None,
+                        "phoneNumber": None,
+                        "others": None
+                    })
+                    return
+        except Exception as e:
+            if "Too Many Requests" in str(e) or "429" in str(e):
+                await asyncio.sleep(random.uniform(5, 10))
                 out.append({
                     "name": name,
                     "domain": domain,
                     "method": method,
                     "frequent_rate_limit": frequent_rate_limit,
-                    "rateLimit": False,
-                    "exists": True,
+                    "rateLimit": True,
+                    "exists": False,
                     "emailrecovery": None,
                     "phoneNumber": None,
                     "others": None
                 })
                 return
-        except:
             pass
 
         # Add random delay between 1-3 seconds
         await asyncio.sleep(random.uniform(1, 3))
 
-        # Method 4: Try username lookup
+        # Method 4: Try profile lookup
         try:
             username = email.split('@')[0]
             lookup_check = await client.get(
-                f'https://mail.google.com/mail/gxlu?email={username}',
+                f'https://profile.adobe.com/{username}',
                 headers=headers
             )
 
@@ -217,7 +306,21 @@ async def gmail(email, client, out):
                     "others": None
                 })
                 return
-        except:
+        except Exception as e:
+            if "Too Many Requests" in str(e) or "429" in str(e):
+                await asyncio.sleep(random.uniform(5, 10))
+                out.append({
+                    "name": name,
+                    "domain": domain,
+                    "method": method,
+                    "frequent_rate_limit": frequent_rate_limit,
+                    "rateLimit": True,
+                    "exists": False,
+                    "emailrecovery": None,
+                    "phoneNumber": None,
+                    "others": None
+                })
+                return
             pass
 
         # If we get here, no account was found
